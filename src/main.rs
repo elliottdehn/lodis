@@ -1,4 +1,5 @@
-/// This is a hard-to-kill web-server, and an easy-to-upgrade binary!
+/// This is a hard-to-kill web-server, and an easy-to-upgrade binary.
+/// It does nothing but deploy, maintain & upgrade itself.. have fun!
 
 // "Upgrade all hosts" is ~TRIVIAL: `cargo build` (overwrite binary).
 // >> Use nginx (or any LB) to distribute incoming load across ports.
