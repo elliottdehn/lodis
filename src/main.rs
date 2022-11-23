@@ -1,7 +1,7 @@
 /// This is a hard-to-kill web-server, and an easy-to-upgrade binary!
 // "Upgrade all hosts" is ~TRIVIAL: `cargo build` (overwrite binary).
 // "Killing all hosts" is ~IMPOSSIBLE (out-of-band kill-all required):
-// > Use `chmod 000 host` to slay all of the hosted servers at once!
+// >> Use `chmod 000 host` to slay all of the hosted servers at once.
 use actix_web::web::Buf;
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 use async_std::sync::RwLock;
