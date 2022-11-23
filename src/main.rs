@@ -1,12 +1,3 @@
-/// This is a hard-to-kill web-server, and an easy-to-upgrade binary.
-/// It does nothing but deploy, maintain & upgrade itself.. have fun!
-
-// "Upgrade all hosts" is ~TRIVIAL: `cargo build` (overwrite binary).
-// >> Use nginx (or any LB) to distribute incoming load across ports.
-
-// "Killing all hosts" is ~IMPOSSIBLE (out-of-band kill-all REQUIRED):
-// >> Use `chmod 000 host` to slay all of the hosted servers at once.
-
 use actix_web::web::Buf;
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 use async_std::sync::RwLock;
@@ -39,6 +30,15 @@ async fn _gen_kill() -> impl Responder {
   abort();
   ok(&true) // NOTE: Unreachable.
 }
+
+/// This is a hard-to-kill web-server, and an easy-to-upgrade binary.
+/// It does nothing but deploy, maintain & upgrade itself.. have fun!
+
+// "Upgrade all hosts" is ~TRIVIAL: `cargo build` (overwrite binary).
+// >> Use nginx (or any LB) to distribute incoming load across ports.
+
+// "Killing all hosts" is ~IMPOSSIBLE (out-of-band kill-all REQUIRED):
+// >> Use `chmod 000 host` to slay all of the hosted servers at once.
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
