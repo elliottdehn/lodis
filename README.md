@@ -13,6 +13,14 @@
 
 **...an excellent place to start development!**
 
+## Results
+
+1. It's possible for a relatively small (N=10) cohort of processes to sustain the availability of their services via network *(not system)* interfaces, even despite a strange condition existing in the world where each process in the cohort has a 50% chance of `abort`-ing itself every second.
+2. The minimum viable continuous integration of a Rust binary is (in theory) `cargo build` and, in-fact, one can achieve that without loss of availability in their web services via this design I've demonstrated above--the desirability of `cargo build` as a continuous integration solution is a question left up to readers, however the _feasibility_ of such (or similar, such as overwriting the executable binary by some other means) has been at this point proven "in the lab, and therefore in practice." (joking)
+3. There seems to be **strong evidence** (although I will not say "conclusive" or "decisive") that there exists a race-condition in levels at-or-below the Actix Web framework, down through the Rust language all the way to (and perhaps including) OSX itself, that results in a violation of the "exclusive port-binding invariant" that exists in most (all?) modern systems: [(see issue)](https://github.com/actix/actix-web/issues/2932)
+
+[(see discussion)](https://rust-lang.zulipchat.com/#narrow/stream/122651-general/topic/Distributed.20web-server.20research/near/312117377)
+
 ## Contents
 
 Since `lodis` is just one file, readers may find it easier to 
