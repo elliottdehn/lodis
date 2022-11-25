@@ -2,7 +2,7 @@
 
 > Local Distributed Server
 
-_Powered by [Actix](https://github.com/actix/actix-web)._
+_Powered by [Actix](https://github.com/actix/actix-web)._ (revealer of [issue(s)?](https://github.com/actix/actix-web/issues/2932))
 
 ## Features
 
