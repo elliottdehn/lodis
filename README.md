@@ -2,7 +2,7 @@
 
 > Local Distributed Server
 
-_(phonetic: "loh-dih-ess", informal: "loh-dis")_
+_(pedantic: "loh-dih-ess", informal: "loh-dis")_
 
 **Powered by [Actix](https://github.com/actix/actix-web).** _(revealer of [issue(s)?](https://github.com/actix/actix-web/issues/2932))_
 
