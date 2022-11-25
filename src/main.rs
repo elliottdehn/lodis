@@ -2,7 +2,6 @@ use actix_web::web::{Buf};
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
 use async_std::task;
 use futures::FutureExt;
-use mapcomp::{hashmapc, vecc};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
@@ -87,6 +86,25 @@ async fn main() -> io::Result<()> {
 
 /* PROJECT INFRASTRUCTURE */
 
+fn slog(s: &str) {
+  let log = format!("(time: {}) (pid: {}) {s}\n", now_fmt(), id());
+  let mut file_lock = match FileLock::lock(
+    "./slog",
+    true,
+    FileOptions::new().read(false).append(true).create(true),
+  ) {
+    Ok(lock) => lock,
+    Err(err) => {
+      panic!("Error getting file write lock: {}", err)
+    }
+  };
+  file_lock
+    .file
+    .write_all(log.as_bytes())
+    .expect("Failed to write");
+  file_lock.unlock().x();
+}
+
 static mut __NONCE: u64 = 0;
 
 async fn gen_respawn(port: Port) {
@@ -100,7 +118,6 @@ async fn gen_respawn(port: Port) {
   // attribution arguments...
   exec.arg(id().to_string());
   exec.arg(nonce.to_string());
-
   // now spawn the process...
   exec.spawn().expect("Failed to spawn the child");
 
@@ -169,10 +186,6 @@ where
   result
 }
 
-fn ok<T: Serialize>(t: &T) -> impl Responder {
-  HttpResponse::Ok().body(json_encode(t))
-}
-
 type Port = u16;
 type Pid = u32;
 #[derive(Serialize, Deserialize)]
@@ -204,6 +217,10 @@ fn get_host_ports() -> HashSet<Port> {
     .collect::<HashSet<Port>>()
 }
 
+fn ok<T: Serialize>(t: &T) -> impl Responder {
+  HttpResponse::Ok().body(json_encode(t))
+}
+
 /* GENERAL INFRASTRUCTURE */
 
 fn argv() -> Vec<String> {
@@ -217,6 +234,16 @@ fn now() -> Time {
     .duration_since(UNIX_EPOCH)
     .unwrap()
     .as_micros()
+}
+
+fn now_fmt() -> String {
+  let t = now();
+  let micros = t % 1000;
+  let micros_str = format!("{:0>3}", micros.to_string());
+  let millis = ((t - micros) / 1000) % 1000;
+  let millis_str = format!("{:0>3}", millis.to_string());
+  let seconds = t / (1000 * 1000);
+  format!("{seconds}.{millis_str}.{micros_str}")
 }
 
 fn json_decode<T: DeserializeOwned>(s: &str) -> T {
@@ -246,37 +273,6 @@ impl<D, E> X<D> for Result<D, E> {
   }
 }
 
-fn now_fmt() -> String {
-  let t = now();
-  let micros = t % 1000;
-  let micros_str = format!("{:0>3}", micros.to_string());
-  let millis = ((t - micros) / 1000) % 1000;
-  let millis_str = format!("{:0>3}", millis.to_string());
-  let seconds = t / (1000 * 1000);
-  format!("{seconds}.{millis_str}.{micros_str}")
-}
-
-fn slog(s: &str) {
-  async {
-    let log = format!("(time: {}) (pid: {}) {s}\n", now_fmt(), id());
-    let mut file_lock = match FileLock::lock(
-      "./slog",
-      true,
-      FileOptions::new().read(false).append(true).create(true),
-    ) {
-      Ok(lock) => lock,
-      Err(err) => {
-        panic!("Error getting file write lock: {}", err)
-      }
-    };
-    file_lock
-      .file
-      .write_all(log.as_bytes())
-      .expect("Failed to write");
-    file_lock.unlock().x();
-  }.now_or_never();
-}
-
 fn _read(path: &str) -> Vec<u8> {
   let mut v = vec![];
   OpenOptions::new()
@@ -289,8 +285,11 @@ fn _read(path: &str) -> Vec<u8> {
   v
 }
 
-fn _read_one<T: DeserializeOwned>(path: &str) -> T {
-  json_decode(&String::from_utf8(_read(path)).expect("Invalid format"))
+fn _read_multi<T: DeserializeOwned>(path: &str) -> Vec<T> {
+  serde_json::de::Deserializer::from_reader(_read(path).reader())
+    .into_iter::<T>()
+    .map(|r| r.expect("Invalid format"))
+    .collect()
 }
 
 fn _append_one<'a, T: Serialize>(path: &str, item: &'a T) -> &'a T {
@@ -307,63 +306,17 @@ fn _append_one<'a, T: Serialize>(path: &str, item: &'a T) -> &'a T {
   item
 }
 
-fn _read_multi<T: DeserializeOwned>(path: &str) -> Vec<T> {
-  serde_json::de::Deserializer::from_reader(_read(path).reader())
-    .into_iter::<T>()
-    .map(|r| r.expect("Invalid format"))
-    .collect()
-}
-
 trait Index<K: Eq + Hash, V> {
   // static
-  fn from_entries(entries: &[(K, V)]) -> HashMap<&K, &V>;
   fn from_entries_multi(entries: &[(K, V)]) -> HashMap<&K, Vec<&V>>;
 
   // object
-  fn getx(&self, key: &K) -> &V;
-  fn getx_mut(&mut self, key: &K) -> &mut V;
-  fn entries(&self) -> Vec<(&K, &V)>;
-
-  fn add(&mut self, key: K, val: V) -> (&V, bool);
   fn append<F>(&mut self, key: K, val: V, cat: F) -> (&V, bool)
   where
     F: Fn(&mut V, V);
 }
 
-trait Keyset<K: Hash + Eq> {}
-
-trait Vector<T> {
-  fn unique_by<F, K>(&self, f: F) -> Vec<&T>
-  where
-    K: Eq + Hash,
-    F: Fn(&T) -> K;
-}
-impl<T> Vector<T> for Vec<T> {
-  fn unique_by<F, K>(&self, uq: F) -> Vec<&T>
-  where
-    K: Eq + Hash,
-    F: Fn(&T) -> K,
-  {
-    let seen: HashSet<K> = HashSet::new();
-    let mut items = Vec::new();
-    for item in self {
-      let key = (uq)(item);
-      if !seen.contains(&key) {
-        items.push(item);
-      }
-    }
-    items
-  }
-}
-
 impl<K: Eq + Hash, V> Index<K, V> for HashMap<K, V> {
-  fn from_entries(entries: &[(K, V)]) -> HashMap<&K, &V> {
-    hashmapc! {
-      &entry.0 => &entry.1;
-      for entry in entries
-    }
-  }
-
   fn from_entries_multi(entries: &[(K, V)]) -> HashMap<&K, Vec<&V>> {
     let mut m: HashMap<&K, Vec<&V>> = HashMap::new();
     for entry in entries {
@@ -375,36 +328,6 @@ impl<K: Eq + Hash, V> Index<K, V> for HashMap<K, V> {
       }
     }
     m
-  }
-
-  fn getx(&self, key: &K) -> &V {
-    self.get(key).unwrap()
-  }
-
-  fn getx_mut(&mut self, key: &K) -> &mut V {
-    self.get_mut(key).unwrap()
-  }
-
-  fn entries(&self) -> Vec<(&K, &V)> {
-    vecc![
-      (key, self.getx(key));
-      for key in self.keys()
-    ]
-  }
-
-  fn add(&mut self, key: K, val: V) -> (&V, bool) {
-    let added;
-    let value = match self.entry(key) {
-      Entry::Occupied(o) => {
-        added = false;
-        o.into_mut()
-      }
-      Entry::Vacant(v) => {
-        added = true;
-        v.insert(val)
-      }
-    };
-    (value, added)
   }
 
   fn append<F>(&mut self, key: K, val: V, cat: F) -> (&V, bool)
