@@ -15,6 +15,8 @@
 
 ## Results
 
+I was able to achieve a binary executable migration on a still-running group of hosts by using `cargo build` which indicates (but does not prove, of course) the viability of an executable-overwrite oriented continuous integration system. The web service in question is objectively far more stable within the `lodis` framework than it is outside of it, and this is demonstrated by the continuous sustainment of a time-service despite process abortion at a rate of 50% every second.
+
 1. It's possible for a relatively small (N=10) cohort of processes to sustain the availability of their services via network *(not system)* interfaces, even despite a strange condition existing in the world where each process in the cohort has a 50% chance of `abort`-ing itself every second.
 2. The minimum viable continuous integration of a Rust binary is (in theory) `cargo build` and, in-fact, one can achieve that without loss of availability in their web services via this design I've demonstrated above--the desirability of `cargo build` as a continuous integration solution is a question left up to readers, however the _feasibility_ of such (or similar, such as overwriting the executable binary by some other means) has been at this point proven "in the lab, and therefore in practice." (joking)
 3. There seems to be **strong evidence** (although I will not say "conclusive" or "decisive") that there exists a race-condition in levels at-or-below the Actix Web framework, down through the Rust language all the way to (and perhaps including) OSX itself, that results in a violation of the "exclusive port-binding invariant" that exists in most (all?) modern systems: [(see issue)](https://github.com/actix/actix-web/issues/2932)
