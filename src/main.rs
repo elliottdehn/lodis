@@ -1,9 +1,7 @@
-use actix_web::web::Buf;
+use actix_web::web::{Buf};
 use actix_web::{get, App, HttpResponse, HttpServer, Responder};
-use async_std::sync::RwLock;
 use async_std::task;
 use futures::FutureExt;
-use lazy_static::lazy_static;
 use mapcomp::{hashmapc, vecc};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -23,12 +21,6 @@ use std::{env, io};
 #[get("/__/time")] // Always useful.
 async fn _gen_time() -> impl Responder {
   ok(&now())
-}
-
-#[get("/__/kill")] // "Never useful!"
-async fn _gen_kill() -> impl Responder {
-  abort();
-  ok(&true) // NOTE: Unreachable.
 }
 
 /// This is a hard-to-kill web-server, and an easy-to-upgrade binary.
@@ -71,19 +63,22 @@ async fn main() -> io::Result<()> {
   // >> This is just for demonstration and SHOULD NOT be in production.
   let mut rng = rand::thread_rng();
   loop {
-    for host_port in get_host_ports() {
+    for port_host in get_host_ports() {
       let response =
-        reqwest::get(format!("http://localhost:{}/__/time", host_port))
+        reqwest::get(format!("http://localhost:{}/__/time", port_host))
           .await;
       match response {
         Ok(_) => {}
-        Err(_) => /* "Oh dear, you are dead!" */ gen_respawn(host_port)
-          .await,
+        Err(_) => {
+          /* "Oh dear, you are dead!" */
+          gen_respawn(port_host).await
+        }
       }
     }
-    // ...not anymore!
+
     if rng.gen::<f64>() > 0.5 {
-      abort(); /* "Oh dear, I am dead!" */
+      abort();
+      /* "Oh dear, I am dead!" */
     } else {
       task::sleep(Duration::from_secs(1)).await;
     }
@@ -92,17 +87,44 @@ async fn main() -> io::Result<()> {
 
 /* PROJECT INFRASTRUCTURE */
 
+static mut __NONCE: u64 = 0;
+
+async fn gen_respawn(port: Port) {
+  let nonce = unsafe { __NONCE };
+  slog(&format!("-{} (nonce: {})", port, nonce));
+
+  let mut exec = Command::new(&argv()[0]);
+  // functional arguments...
+  exec.arg(port.to_string());
+  exec.arg(0.to_string());
+  // attribution arguments...
+  exec.arg(id().to_string());
+  exec.arg(nonce.to_string());
+
+  // now spawn the process...
+  exec.spawn().expect("Failed to spawn the child");
+
+  unsafe { __NONCE += 1 }
+}
+
 async fn gen_deploy(ports: (Port, Option<Port>)) -> Option<Port> {
   gen_bind(ports, |port_try| {
     async move {
-      let srv = HttpServer::new(|| {
-        App::new().service(_gen_time).service(_gen_kill)
-      });
+      let srv = HttpServer::new(|| App::new().service(_gen_time));
       let res = srv
         .bind(("localhost", port_try))
         .map(|s| (&mut s.run()).now_or_never());
       match res {
-        Ok(_) => {
+        Ok(ret) => {
+          if ret.is_none() {
+            // `run` future not ready means server ran
+            slog(&format!(
+              "+{} (cause: (pid: {}, nonce: {}))",
+              port_try,
+              argv().get(3).unwrap_or(&String::from("-1")),
+              argv().get(4).unwrap_or(&String::from("-1")),
+            ));
+          }
           _append_one(
             "host",
             &LocalHost {
@@ -182,16 +204,11 @@ fn get_host_ports() -> HashSet<Port> {
     .collect::<HashSet<Port>>()
 }
 
-async fn gen_respawn(port: Port) {
-  let argv = env::args().collect::<Vec<String>>();
-  let exec = &argv[0];
-  let mut exec_init = Command::new(exec);
-  exec_init.arg(port.to_string());
-  exec_init.arg(0.to_string());
-  exec_init.spawn().expect("Failed to spawn the child");
-}
-
 /* GENERAL INFRASTRUCTURE */
+
+fn argv() -> Vec<String> {
+  env::args().collect::<Vec<String>>()
+}
 
 type Time = u128;
 
@@ -229,23 +246,35 @@ impl<D, E> X<D> for Result<D, E> {
   }
 }
 
-lazy_static! {
-  static ref __SLOG: RwLock<Vec<String>> = RwLock::new(Vec::new());
+fn now_fmt() -> String {
+  let t = now();
+  let micros = t % 1000;
+  let micros_str = format!("{:0>3}", micros.to_string());
+  let millis = ((t - micros) / 1000) % 1000;
+  let millis_str = format!("{:0>3}", millis.to_string());
+  let seconds = t / (1000 * 1000);
+  format!("{seconds}.{millis_str}.{micros_str}")
 }
 
 fn slog(s: &str) {
-  let fo = FileOptions::new().read(false).append(true).create(true);
-  let mut file_lock = match FileLock::lock("./slog", true, fo) {
-    Ok(lock) => lock,
-    Err(err) => panic!("Error getting file write lock: {}", err),
-  };
-  file_lock
-    .file
-    .write_all(
-      format!("(time: {}) (pid: {}) {s}\n", now(), id()).as_bytes(),
-    )
-    .expect("Failed to write");
-  file_lock.unlock().x();
+  async {
+    let log = format!("(time: {}) (pid: {}) {s}\n", now_fmt(), id());
+    let mut file_lock = match FileLock::lock(
+      "./slog",
+      true,
+      FileOptions::new().read(false).append(true).create(true),
+    ) {
+      Ok(lock) => lock,
+      Err(err) => {
+        panic!("Error getting file write lock: {}", err)
+      }
+    };
+    file_lock
+      .file
+      .write_all(log.as_bytes())
+      .expect("Failed to write");
+    file_lock.unlock().x();
+  }.now_or_never();
 }
 
 fn _read(path: &str) -> Vec<u8> {
