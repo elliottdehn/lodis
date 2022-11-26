@@ -11,7 +11,7 @@ _(pedantic: "loh-dih-ess", informal: "loh-dis")_
 ## Features
 
 - Deploys, maintains and upgrades itself.
-- Delivers resilience with local resources.
+- Delivers [resilience](https://www.google.com/search?q=resilience+definition&rlz=1C5CHFA_enUS1009US1009&oq=resilience+de&aqs=chrome.0.0i433i512j69i57j0i512l8.3451j1j4&sourceid=chrome&ie=UTF-8) with local resources.
 - Trivializes basic continuous integration.
 - Built for builders: all code is in one file.
 
